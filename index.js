@@ -6,7 +6,7 @@ const port = process.env.PORT || 5000
 app.use(cors())
 
 app.use(express.json())
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 
 
@@ -34,6 +34,7 @@ async function run() {
 
 const biodataCollection=client.db('metrimonyDb').collection('biodata')
 const successCollection=client.db('metrimonyDb').collection('success')
+const favoritebiodata=client.db('metrimonyDb').collection('favoritebiodata')
 
 
 
@@ -41,11 +42,127 @@ app.get('/biodata', async(req,res)=>{
     const result=await biodataCollection.find().toArray()
     res.send(result)
 })
+app.get('/biodata/user', async (req, res) => {
+  const { email } = req.query; 
+  
+ 
+
+  const query = { contact_email: email }; 
+  const result = await biodataCollection.find(query).toArray();
+ res.send(result)
+});
+
+app.get('/biodata/:id', async (req, res) => {
+  const id = req.params.id;
+  console.log('Received ID:', id);
+  const query = { _id: new ObjectId(id) };
+    const result = await biodataCollection.findOne(query);
+  res.send(result);
+});
+
+
 
 app.get('/success', async(req,res)=>{
     const result=await successCollection.find().toArray()
     res.send(result)
 })
+
+
+app.get('/biodata/similar/:id', async (req, res) => {
+  const id = req.params.id;
+  const biodata = await biodataCollection.findOne({ _id: new ObjectId(id) });
+  const { biodata_type } = biodata; 
+
+  const similarBiodata = await biodataCollection
+  .find({ biodata_type })  
+  .limit(3)  
+  .toArray();
+  
+res.send(similarBiodata);
+
+
+})
+
+
+app.post('/biodata', async (req, res) => {
+  const newBio = req.body;
+
+  const maxIdDoc = await biodataCollection.findOne({}, { sort: { bioId: -1 }, projection: { bioId: 1 } });
+  const newId = maxIdDoc ? parseInt(maxIdDoc.bioId) + 1 : 1; 
+
+  newBio.bioId = newId; 
+
+  const result = await biodataCollection.insertOne(newBio);
+  res.send(result)
+});
+
+
+
+// Update biodata by ID
+app.put('/biodata/:id', async (req, res) => {
+  const id = req.params.id;
+  const updatedData = req.body;
+
+  const result = await biodataCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: updatedData }
+  );
+
+  res.send(result);
+});
+
+
+app.post('/favorites', async (req, res) => {
+  const { biodataId, userEmail, biodataDetails } = req.body;
+  const newFavorite = {
+    biodataId,
+    userEmail,
+    ...biodataDetails, 
+  };
+  const result = await favoritebiodata.insertOne(newFavorite);
+res.send(result)
+
+  
+})
+
+app.get('/favorites/user', async (req, res) => {
+  const { email } = req.query; 
+  console.log('Received email:', email);
+ 
+
+  const query = { userEmail: email }; 
+  const result = await favoritebiodata.find(query).toArray();
+ res.send(result)
+});
+
+
+app.delete('/favorites/delete/:id', async (req, res) => {
+  const { id } = req.params;
+  console.log('Deleting biodata with ID:', id);
+
+
+    const result = await favoritebiodata.deleteOne({ _id: new ObjectId(id) });
+
+   res.send(result)
+});
+
+
+app.get('/successCounter', async (req, res) => {
+
+ const totalBiodata = await biodataCollection.countDocuments(); 
+ const totalGirls = await biodataCollection.countDocuments({ biodata_type: 'Female' }); 
+ const totalBoys = await biodataCollection.countDocuments({ biodata_type: 'Male' }); 
+ const totalMarriages = await successCollection.countDocuments({ marriageStatus: 'Completed' }); 
+
+ res.json({
+ totalBiodata,
+ totalGirls,
+ totalBoys,
+ totalMarriages
+ });
+
+ });
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
