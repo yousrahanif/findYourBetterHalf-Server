@@ -36,6 +36,7 @@ const biodataCollection=client.db('metrimonyDb').collection('biodata')
 const successCollection=client.db('metrimonyDb').collection('success')
 const favoritebiodata=client.db('metrimonyDb').collection('favoritebiodata')
 
+const userCollection=client.db('metrimonyDb').collection('users')
 
 
 app.get('/biodata', async(req,res)=>{
@@ -66,7 +67,24 @@ app.get('/success', async(req,res)=>{
     const result=await successCollection.find().toArray()
     res.send(result)
 })
+app.post('/success', async (req, res) => {
+  const { selfBiodataId, partnerBiodataId, coupleImage, marriageDate, storyText, reviewStars } = req.body;
 
+  
+    const newSuccessStory = {
+      selfBiodataId,
+      partnerBiodataId,
+      coupleImage,
+      marriageDate,
+      storyText,
+      reviewStars,
+      createdAt: new Date(), 
+    };
+
+    const result = await successCollection.insertOne(newSuccessStory);
+   res.send(result)
+
+});
 
 app.get('/biodata/similar/:id', async (req, res) => {
   const id = req.params.id;
@@ -152,16 +170,58 @@ app.get('/successCounter', async (req, res) => {
  const totalBiodata = await biodataCollection.countDocuments(); 
  const totalGirls = await biodataCollection.countDocuments({ biodata_type: 'Female' }); 
  const totalBoys = await biodataCollection.countDocuments({ biodata_type: 'Male' }); 
+ const totalPremium = await biodataCollection.countDocuments({ member_type: 'Premium' }); 
+
  const totalMarriages = await successCollection.countDocuments({ marriageStatus: 'Completed' }); 
 
  res.json({
  totalBiodata,
  totalGirls,
  totalBoys,
- totalMarriages
+ totalMarriages,
+ totalPremium
  });
 
  });
+
+// Fetch user by email
+// app.get('/users/:email', async (req, res) => {
+//   const email = req.params.email;
+//   const user = await userCollection.findOne({ email });
+// res.send(user)
+// });
+
+// app.get('/users', async(req,res)=>{
+//   const result=await userCollection.find().toArray()
+//   res.send(result)
+// })
+
+
+app.get('/users', async (req, res) => {
+ 
+    const users = await userCollection.find().toArray(); // Fetch all users
+    res.send(users);
+ 
+});
+
+app.get('/users/:email', async (req, res) => {
+  const email = req.params.email;
+  const result = await userCollection.findOne({ email });
+  res.send(result)
+});
+
+
+ app.post('/users', async(req,res)=>{
+  const { email, role = 'user', member_type = 'normal', displayName} = req.body;
+  const existingUser = await userCollection.findOne({ email });
+  if (existingUser) {
+    return;
+}
+
+const newUser = { email, role, member_type, displayName};
+   const result= await userCollection.insertOne(newUser);
+   res.send(result)
+ })
 
 
     // Send a ping to confirm a successful connection
