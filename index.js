@@ -45,7 +45,7 @@ const primesCollection=client.db('metrimonyDb').collection('primes')
 //     const result=await biodataCollection.find().toArray()
 //     res.send(result)
 // })
-
+//
 app.get('/biodata', async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
