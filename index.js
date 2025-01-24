@@ -3,6 +3,7 @@ const cors = require('cors');
 require('dotenv').config()
 const app=express()
 const port = process.env.PORT || 5000
+
 app.use(cors())
 
 app.use(express.json())
@@ -10,6 +11,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 
 
+let totalRevenue = 0;
 
 
 
@@ -37,12 +39,24 @@ const successCollection=client.db('metrimonyDb').collection('success')
 const favoritebiodata=client.db('metrimonyDb').collection('favoritebiodata')
 
 const userCollection=client.db('metrimonyDb').collection('users')
+const paymentCollection=client.db('metrimonyDb').collection('payments')
+const primesCollection=client.db('metrimonyDb').collection('primes')
+// app.get('/biodata', async(req,res)=>{
+//     const result=await biodataCollection.find().toArray()
+//     res.send(result)
+// })
 
+app.get('/biodata', async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
 
-app.get('/biodata', async(req,res)=>{
-    const result=await biodataCollection.find().toArray()
-    res.send(result)
-})
+  const skip = (page - 1) * limit;
+  const result = await biodataCollection.find().skip(skip).limit(limit).toArray();
+
+  const totalCount = await biodataCollection.countDocuments();
+  res.send({ result, totalCount });
+});
+
 app.get('/biodata/user', async (req, res) => {
   const { email } = req.query; 
   
@@ -55,12 +69,28 @@ app.get('/biodata/user', async (req, res) => {
 
 app.get('/biodata/:id', async (req, res) => {
   const id = req.params.id;
-  console.log('Received ID:', id);
+ 
   const query = { _id: new ObjectId(id) };
     const result = await biodataCollection.findOne(query);
   res.send(result);
 });
 
+
+
+app.post('/biodata/makePremium', async (req, res) => {
+  const { email } = req.body;
+
+  const result = await primesCollection.insertOne({
+ 
+    email
+  });
+   res.send(result)
+});
+
+app.get('/premiumCollection', async(req,res)=>{
+  const result=await primesCollection.find().toArray()
+  res.send(result)
+})
 
 
 app.get('/success', async(req,res)=>{
@@ -116,7 +146,7 @@ app.post('/biodata', async (req, res) => {
 
 
 
-// Update biodata by ID
+
 app.put('/biodata/:id', async (req, res) => {
   const id = req.params.id;
   const updatedData = req.body;
@@ -128,6 +158,7 @@ app.put('/biodata/:id', async (req, res) => {
 
   res.send(result);
 });
+
 
 
 app.post('/favorites', async (req, res) => {
@@ -156,7 +187,6 @@ app.get('/favorites/user', async (req, res) => {
 
 app.delete('/favorites/delete/:id', async (req, res) => {
   const { id } = req.params;
-  console.log('Deleting biodata with ID:', id);
 
 
     const result = await favoritebiodata.deleteOne({ _id: new ObjectId(id) });
@@ -170,16 +200,18 @@ app.get('/successCounter', async (req, res) => {
  const totalBiodata = await biodataCollection.countDocuments(); 
  const totalGirls = await biodataCollection.countDocuments({ biodata_type: 'Female' }); 
  const totalBoys = await biodataCollection.countDocuments({ biodata_type: 'Male' }); 
- const totalPremium = await biodataCollection.countDocuments({ member_type: 'Premium' }); 
+ const totalPremium = await userCollection.countDocuments({ member_type: 'premium' }); 
 
- const totalMarriages = await successCollection.countDocuments({ marriageStatus: 'Completed' }); 
-
+ const totalMarriages = await successCollection.countDocuments();
+ const paymentCount = await paymentCollection.countDocuments();
+ const totalRevenue = paymentCount * 5;
  res.json({
  totalBiodata,
  totalGirls,
  totalBoys,
  totalMarriages,
- totalPremium
+ totalPremium,
+ totalRevenue
  });
 
  });
@@ -199,7 +231,7 @@ app.get('/successCounter', async (req, res) => {
 
 app.get('/users', async (req, res) => {
  
-    const users = await userCollection.find().toArray(); // Fetch all users
+    const users = await userCollection.find().toArray(); 
     res.send(users);
  
 });
@@ -222,6 +254,149 @@ const newUser = { email, role, member_type, displayName};
    const result= await userCollection.insertOne(newUser);
    res.send(result)
  })
+
+
+
+ app.patch('/users/update-membership/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const { role } = req.body;
+
+ 
+    const result = await userCollection.updateOne(
+      { _id: new ObjectId(userId) },
+      { $set: { role } }
+    );
+
+    res.send(result);
+  
+});
+
+app.get('/payments', async(req,res)=>{
+  const result=await paymentCollection.find().toArray()
+  res.send(result)
+})
+
+
+app.post("/api/payment", async (req, res) => {
+  const { cardNumber, email, biodataId } = req.body;
+
+  const isValidCardNumber = /^\d{13,19}$/.test(cardNumber);
+
+  if (isValidCardNumber) {
+    // const existingPayment = await paymentCollection.findOne({ biodataId });
+    const existingPayment = await paymentCollection.findOne({ email });
+
+    if (existingPayment) {
+      return res.status(400).json({ message: "You Already Requested" });
+    }
+
+    const payment = {
+      email,
+      biodataId,
+      cardNumber,
+      date: new Date(),
+      amount: 5,
+    };
+
+    paymentCollection.insertOne(payment)
+      .then(() => {
+        res.json({ message: "Payment successful!" });
+      })
+      .catch((error) => {
+        res.status(500).json({ message: "Something went wrong!" });
+      });
+  } else {
+    res.status(400).json({ message: "Invalid card number" });
+  }
+});
+
+
+app.get("/api/revenue", async (req, res) => {
+  paymentCollection.aggregate([
+    { $group: { _id: null, totalRevenue: { $sum: "$amount" } } }
+  ])
+  .toArray()
+  .then((revenue) => {
+    const totalRevenue = revenue.length > 0 ? revenue[0].totalRevenue : 0;
+    res.json({ totalRevenue });
+  })
+  
+});
+
+
+app.patch('/api/users/make-premium', async (req, res) => {
+  const { email } = req.body;
+
+    const result = await userCollection.updateOne(
+      { email },
+      { $set: { member_type: 'premium' } }
+     
+    );
+    res.send(result)
+
+  
+});
+
+// app.patch('/api/biodata/make-premium', async (req, res) => {
+//   const { email } = req.body;
+
+//     const result = await biodataCollection.updateOne(
+//       { email },
+//       { $set: { member_type: 'premium' } }
+     
+//     );
+//     res.send(result)
+
+  
+// });
+
+app.patch('/biodata/update-member-type', async (req, res) => {
+  const { contact_email, member_type } = req.body;
+
+
+
+    const result = await biodataCollection.updateMany(
+      { contact_email }, 
+      { $set: { member_type } } 
+    );
+
+    res.send(result)
+});
+
+
+
+
+//  app.post("/api/payment", (req, res) => {
+//   const { cardNumber } = req.body;
+
+//   const isValidCardNumber = /^\d{13,19}$/.test(cardNumber);
+
+//   if (isValidCardNumber) {
+//     totalRevenue += 5;
+//     console.log(`Payment successful! Total revenue: $${totalRevenue}`);
+
+//     // Send a success response
+//     res.json({ totalRevenue: totalRevenue });
+//     };
+  
+// });
+// app.get("/api/revenue", (req, res) => {
+//   res.json({ totalRevenue });
+// });
+//  app.post("/create-payment-intent", async (req, res) => {
+  
+//     const amount = 500; // $5.00 in cents
+//     const paymentIntent = await stripe.paymentIntents.create({
+//       amount: amount,
+//       currency: "usd",
+//       payment_method_types: ["card"],
+//     });
+
+//     res.send({
+//       clientSecret: paymentIntent.client_secret,
+//     });
+ 
+// });
 
 
     // Send a ping to confirm a successful connection
