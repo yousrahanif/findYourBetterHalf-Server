@@ -4,7 +4,14 @@ require('dotenv').config()
 const app=express()
 const port = process.env.PORT || 5000
 
-app.use(cors())
+app.use(cors({
+origin:[
+  'http://localhost:5173',
+  'https://matrimony-351f1.web.app',
+ 'https://matrimony-351f1.firebaseapp.com',
+]
+
+}))
 
 app.use(express.json())
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -30,7 +37,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
 
 
@@ -41,11 +48,24 @@ const favoritebiodata=client.db('metrimonyDb').collection('favoritebiodata')
 const userCollection=client.db('metrimonyDb').collection('users')
 const paymentCollection=client.db('metrimonyDb').collection('payments')
 const primesCollection=client.db('metrimonyDb').collection('primes')
+const approvedContactsCollection=client.db('metrimonyDb').collection('approved')
+
+
 // app.get('/biodata', async(req,res)=>{
 //     const result=await biodataCollection.find().toArray()
 //     res.send(result)
 // })
 //
+// app.get('/biodata', async (req, res) => {
+//   const page = parseInt(req.query.page) || 1;
+//   const limit = parseInt(req.query.limit) || 10;
+
+//   const skip = (page - 1) * limit;
+//   const result = await biodataCollection.find().skip(skip).limit(limit).toArray();
+
+//   const totalCount = await biodataCollection.countDocuments();
+//   res.send({ result, totalCount });
+// });
 app.get('/biodata', async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
@@ -56,7 +76,6 @@ app.get('/biodata', async (req, res) => {
   const totalCount = await biodataCollection.countDocuments();
   res.send({ result, totalCount });
 });
-
 app.get('/biodata/user', async (req, res) => {
   const { email } = req.query; 
   
@@ -324,18 +343,53 @@ app.get("/api/revenue", async (req, res) => {
 });
 
 
+// app.patch('/api/users/make-premium', async (req, res) => {
+//   const { email } = req.body;
+
+//     const result = await userCollection.updateOne(
+//       { email },
+//       { $set: { member_type: 'premium' } }
+     
+//     );
+//     res.send(result)
+
+  
+// });
 app.patch('/api/users/make-premium', async (req, res) => {
   const { email } = req.body;
 
-    const result = await userCollection.updateOne(
-      { email },
-      { $set: { member_type: 'premium' } }
-     
-    );
-    res.send(result)
+  // Update the user's member_type to 'premium'
+  const result = await userCollection.updateOne(
+    { email },
+    { $set: { member_type: 'premium' } }
+  );
 
-  
+  // Insert the email into the approvedContacts collection
+  // const result2 = await approvedContactsCollection.insertOne({ email });
+
+  // Send only the result of the insert operation
+  res.send(result);
 });
+
+app.post('/api/approved-contacts', async (req, res) => {
+  const { email } = req.body;
+
+ 
+    const result = await approvedContactsCollection.insertOne({ email });
+
+    res.send(result)
+});
+
+
+// app.get('/api/users/make-premium', async(req,res)=>{
+//   const result=await approvedContactsCollection.find().toArray()
+//   res.send(result)
+// })
+app.get('/api/approved-contacts', async (req, res) => {
+  const contacts = await approvedContactsCollection.find().toArray();
+  res.send(contacts);
+});
+
 
 // app.patch('/api/biodata/make-premium', async (req, res) => {
 //   const { email } = req.body;
@@ -400,7 +454,7 @@ app.patch('/biodata/update-member-type', async (req, res) => {
 
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
